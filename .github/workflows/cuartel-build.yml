@@ -21,6 +21,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+
       - name: Escribir proyecto
         run: |
           mkdir -p www/fonts assets
@@ -78,6 +79,7 @@ jobs:
 
           <nav class="tabs" id="tabs">
             <button data-tab="cuartel" class="on"><span>🎖️</span>Cuartel</button>
+            <button data-tab="plan"><span>📋</span>Plan</button>
             <button data-tab="plato"><span>🍽️</span>Plato</button>
             <button data-tab="entreno"><span>💪</span>Entreno</button>
             <button data-tab="progreso"><span>📈</span>Progreso</button>
@@ -155,11 +157,11 @@ jobs:
 
           .tabs {
             position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-            display: grid; grid-template-columns: repeat(4, 1fr);
+            display: grid; grid-template-columns: repeat(5, 1fr);
             background: #0e110b; border-top: 1px solid var(--line);
             padding-bottom: env(safe-area-inset-bottom);
           }
-          .tabs button { padding: 8px 0 10px; color: var(--muted); font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+          .tabs button { padding: 8px 0 10px; color: var(--muted); font-size: 10.5px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 2px; }
           .tabs button span { font-size: 21px; filter: grayscale(1) opacity(.6); transition: filter .2s, transform .2s; }
           .tabs button.on { color: var(--accent); }
           .tabs button.on span { filter: none; transform: translateY(-2px); }
@@ -322,6 +324,25 @@ jobs:
           .switch.on { background: var(--ok); }
           .switch.on::after { transform: translateX(18px); }
 
+          /* Plan del día */
+          .pill.now { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+          .pb-name { font-weight: 700; font-size: 15px; }
+          .plan-banner { background: var(--panel2); border-color: #4a5634; margin-bottom: 10px; }
+          .next-meal { border-color: #6b5420; background: linear-gradient(135deg, #2e2915, var(--panel)); }
+          .timeline { position: relative; }
+          .tl-row { display: grid; grid-template-columns: 46px 14px 1fr; gap: 8px; position: relative; padding-bottom: 14px; }
+          .tl-row::before { content: ''; position: absolute; left: 59px; top: 14px; bottom: 0; width: 2px; background: var(--line); }
+          .tl-row:last-child::before { display: none; }
+          .tl-time { font-size: 12.5px; font-weight: 700; color: var(--muted); padding-top: 1px; font-variant-numeric: tabular-nums; }
+          .tl-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); background: var(--bg); margin-top: 3px; position: relative; z-index: 1; }
+          .tl-body { min-width: 0; }
+          .tl-row.done .tl-dot { background: var(--ok); border-color: var(--ok); }
+          .tl-row.done .tl-time { color: var(--ok); }
+          .tl-row.next .tl-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px rgba(242,177,52,.2); }
+          .tl-row.next .tl-time { color: var(--accent); }
+          .tl-row.extra .tl-dot { width: 8px; height: 8px; margin: 5px 2px 0; background: var(--side); border-color: var(--side); }
+          .tl-row.next .tl-body { background: var(--panel2); border: 1px solid #6b5420; border-radius: 12px; padding: 8px 10px; margin-top: -6px; }
+
           /* Toast & modal */
           .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); background: #2b331f; border: 1px solid #4a5634; padding: 10px 16px; border-radius: 12px; font-weight: 600; opacity: 0; transition: all .3s; z-index: 200; max-width: 88vw; text-align: center; pointer-events: none; }
           .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -483,6 +504,10 @@ jobs:
           const parseD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
           const addDays = (s, n) => { const d = parseD(s); d.setDate(d.getDate() + n); return dstr(d); };
           const daysBetween = (a, b) => Math.round((parseD(b) - parseD(a)) / 86400000);
+          const toMin = hm => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
+          const fromMin = m => { m = ((m % 1440) + 1440) % 1440; return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
+          const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+          const nowHM = () => fromMin(nowMin());
           const shortDate = s => { const d = parseD(s); return `${d.getDate()}/${d.getMonth() + 1}`; };
 
           // ---------- estado ----------
@@ -496,10 +521,13 @@ jobs:
             customFoods: [],
             med: {},
             settings: { reminders: false },
+            routine: null,
           });
+          const DEFAULT_ROUTINE = { wake: '08:40', desayuno: '09:20', colacion1: '11:30', almuerzo: '13:30', colacion2: '16:30', once: '18:30', cena: '20:30', sleep: '23:30' };
           let S;
           try { S = Object.assign(DEFAULT(), JSON.parse(localStorage.getItem(KEY) || 'null') || {}); }
           catch (e) { S = DEFAULT(); }
+          S.routine = Object.assign({}, DEFAULT_ROUTINE, S.routine || {});
           const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('No se pudo guardar', true); } };
           const day = (d = today()) => {
             if (!S.days[d]) S.days[d] = { water: 0, meals: {}, circuits: 0, march: null };
@@ -514,7 +542,16 @@ jobs:
             { id: 'colacion2', n: 'Colación PM', e: '🥛' },
             { id: 'once', n: 'Once', e: '🫖' },
             { id: 'cena', n: 'Cena', e: '🌙' },
+            { id: 'extra', n: 'Fuera de horario', e: '🍫' },
           ];
+          const SLOTS = MEALS.filter(m => m.id !== 'extra');
+          // comida que corresponde según la hora y tu rutina
+          function slotForTime(min = nowMin(), strict = false) {
+            let best = null, bestD = 1e9;
+            for (const m of SLOTS) { const d = Math.abs(min - toMin(S.routine[m.id])); if (d < bestD) { bestD = d; best = m.id; } }
+            if (strict && bestD > 45) return 'extra';
+            return best;
+          }
           const WATER_GOAL = 3000;
           const currentWeight = () => S.weights.length ? S.weights[S.weights.length - 1].kg : S.profile.startWeight;
           function targets() {
@@ -551,6 +588,77 @@ jobs:
             for (const m of MEALS) { const mt = mealTotals(dd.meals[m.id] || []); t.k += mt.k; t.pr += mt.pr; t.c += mt.c; t.g += mt.g; }
             return t;
           }
+
+          // ---------- plan de comidas ----------
+          // Cada opción: [idAlimento, porciones]. El plan del día combina una opción por comida
+          // buscando quedar cerca de tu ración diaria. Cambia solo cada día.
+          const PLAN_OPTIONS = {
+            desayuno: [
+              { n: 'Huevos con pan', it: [['huevo', 2], ['marraqueta', 1], ['tomate', 1], ['cafe', 1]] },
+              { n: 'Yogur con avena', it: [['yogurgri', 1], ['avena', 0.5], ['frutillas', 1], ['cafe', 1]] },
+              { n: 'Sándwich de pavo', it: [['panintegral', 1], ['quesillo', 1], ['jamonpavo', 1], ['tomate', 0.5], ['cafe', 1]] },
+              { n: 'Tortilla de verduras', it: [['tortillaverd', 1], ['marraqueta', 1], ['cafe', 1]] },
+              { n: 'Huevo, palta y pan integral', it: [['claras', 1], ['huevo', 1], ['panintegral', 1], ['palta', 0.5], ['cafe', 1]] },
+            ],
+            colacion1: [
+              { n: 'Manzana', it: [['manzana', 1]] },
+              { n: 'Yogur natural', it: [['yogurnat', 1]] },
+              { n: 'Pera', it: [['pera', 1]] },
+              { n: 'Huevo duro y pepino', it: [['huevo', 1], ['pepino', 0.5]] },
+              { n: 'Naranja', it: [['naranja', 1]] },
+            ],
+            almuerzo: [
+              { n: 'Pollo con arroz', it: [['pollo', 1], ['ensaladachilena', 1], ['lechuga', 1], ['arroz', 1], ['aceite', 0.5]] },
+              { n: 'Merluza con papa', it: [['merluza', 1], ['brocoli', 1], ['zanahoria', 1], ['papa', 1], ['aceite', 0.5]] },
+              { n: 'Posta con quinoa', it: [['posta', 1], ['porverdes', 1], ['tomate', 1], ['quinoa', 1], ['aceite', 0.5]] },
+              { n: 'Lentejas con ensalada', it: [['lentejasguiso', 1], ['ensaladachilena', 1]] },
+              { n: 'Pavo con camote', it: [['pavo', 1], ['repollo', 1], ['zanahoria', 1], ['camote', 1], ['aceite', 0.5]] },
+              { n: 'Cazuela y ensalada', it: [['cazuela', 1], ['lechuga', 1], ['tomate', 1]] },
+              { n: 'Ensalada de atún con arroz', it: [['atun', 1], ['lechuga', 1], ['tomate', 1], ['pepino', 1], ['arroz', 1], ['aceite', 0.5]] },
+              { n: 'Carne molida con zapallo italiano', it: [['molida', 1], ['zapallito', 1], ['tomate', 1], ['arroz', 1]] },
+            ],
+            colacion2: [
+              { n: 'Yogur griego', it: [['yogurgri', 1]] },
+              { n: 'Manzana con quesillo', it: [['manzana', 1], ['quesillo', 1]] },
+              { n: 'Naranja y huevo duro', it: [['naranja', 1], ['huevo', 1]] },
+              { n: 'Kiwi y frutos secos', it: [['kiwi', 1], ['nueces', 0.5]] },
+            ],
+            once: [
+              { n: 'Pan integral con quesillo', it: [['panintegral', 1], ['quesillo', 1], ['tomate', 1], ['cafe', 1]] },
+              { n: 'Marraqueta con palta y huevo', it: [['marraqueta', 1], ['palta', 1], ['huevo', 1], ['cafe', 1]] },
+              { n: 'Yogur griego con frutillas', it: [['yogurgri', 1], ['frutillas', 1], ['cafe', 1]] },
+              { n: 'Pan integral con pavo', it: [['panintegral', 1], ['jamonpavo', 1], ['quesillo', 1], ['cafe', 1]] },
+            ],
+            cena: [
+              { n: 'Pollo con brócoli', it: [['pollo', 1], ['brocoli', 1], ['lechuga', 1], ['aceite', 0.5]] },
+              { n: 'Merluza con espinaca', it: [['merluza', 1], ['espinaca', 1], ['tomate', 1], ['aceite', 0.5]] },
+              { n: 'Tortilla y ensalada chilena', it: [['tortillaverd', 1], ['ensaladachilena', 1]] },
+              { n: 'Salmón con porotos verdes', it: [['salmon', 1], ['porverdes', 1]] },
+              { n: 'Pavo con zapallo y champiñones', it: [['pavo', 1], ['zapallito', 1], ['champinon', 1], ['aceite', 0.5]] },
+              { n: 'Ensalada con pollo', it: [['ensaladapollo', 1]] },
+            ],
+          };
+          const optKcal = o => o.it.reduce((s, [id, q]) => s + (food(id) ? food(id).k * q : 0), 0);
+          function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+          function basePlan(d) {
+            const T = targets().kcal, seed = parseD(d).getTime() / 86400000;
+            const r = rng(Math.floor(seed) * 7919);
+            let best = null, bestDiff = 1e9;
+            for (let k = 0; k < 60; k++) {
+              const pick = {}; let tot = 0;
+              for (const s of SLOTS) { const opts = PLAN_OPTIONS[s.id]; const i = Math.floor(r() * opts.length); pick[s.id] = i; tot += optKcal(opts[i]); }
+              const diff = Math.abs(tot - T);
+              if (diff < bestDiff) { best = pick; bestDiff = diff; }
+            }
+            return best;
+          }
+          function planFor(d = today()) {
+            const dd = day(d), base = basePlan(d), ov = dd.planOv || {};
+            const out = {};
+            for (const s of SLOTS) { const opts = PLAN_OPTIONS[s.id]; const i = ((ov[s.id] ?? base[s.id]) % opts.length + opts.length) % opts.length; out[s.id] = Object.assign({ idx: i }, opts[i]); }
+            return out;
+          }
+          const planText = o => o.it.map(([id, q]) => { const f = food(id); return f ? (q !== 1 ? `${q === 0.5 ? '½' : q + '×'} ` : '') + f.n.toLowerCase() : ''; }).filter(Boolean).join(', ');
 
           // ---------- bebidas (racha) ----------
           function streak() {
@@ -640,7 +748,7 @@ jobs:
             if (!S.profile) { $('#tabs').style.display = 'none'; $('#missionChip').style.display = 'none'; return renderSetup(); }
             $('#tabs').style.display = ''; $('#missionChip').style.display = '';
             $('#missionChip').textContent = missionDay() <= 30 ? `DÍA ${missionDay()}/30` : `DÍA ${missionDay()}`;
-            ({ cuartel: renderCuartel, plato: renderPlato, entreno: renderEntreno, progreso: renderProgreso })[TAB]();
+            ({ cuartel: renderCuartel, plan: renderPlan, plato: renderPlato, entreno: renderEntreno, progreso: renderProgreso })[TAB]();
           }
 
           // ================= SETUP =================
@@ -698,6 +806,8 @@ jobs:
                 </div></div>
             </div>
 
+            ${nextMealCard()}
+
             <div class="grid2 mb">
               <div class="card streak ${st === 0 ? 'zero' : ''}">
                 <div class="small muted">Sin bebidas</div>
@@ -730,6 +840,17 @@ jobs:
             `;
           }
 
+          function nextMealCard() {
+            const nm = nextMeal(), n = nowMin();
+            if (!nm) return `<div class="card tight"><div class="row between"><span>🫡 Comidas de hoy terminadas</span><button class="btn sm" data-act="snackOpen">🍫 Comí algo</button></div></div>`;
+            const p = planFor()[nm.id], t = toMin(S.routine[nm.id]);
+            return `<div class="card next-meal">
+              <div class="row between"><span class="small muted">PRÓXIMA COMIDA · ${S.routine[nm.id]}</span><span class="pill now">${t > n ? 'en ' + fmtDur(t - n) : 'AHORA'}</span></div>
+              <div class="pb-name mt">${nm.e} ${nm.n}: ${esc(p.n)}</div><div class="small muted">${esc(planText(p))} · ~${fmt(optKcal(p))} kcal</div>
+              <div class="row mt" style="flex-wrap:wrap"><button class="btn sm primary" data-act="eatPlan" data-slot="${nm.id}">✓ Lo comí así</button><button class="btn sm" data-act="buildSlot" data-slot="${nm.id}">🍽️ Armar plato</button><button class="btn sm" data-act="snackOpen">🍫 Comí algo</button></div>
+            </div>`;
+          }
+
           const MED_ITEMS = [
             { id: 'hora', t: 'Pedir hora (EMP en CESFAM o médico)' },
             { id: 'glic', t: 'Glicemia en ayunas' },
@@ -750,11 +871,7 @@ jobs:
 
           // ================= PLATO =================
           let MEAL = null, CAT = 'veg', QUERY = '';
-          function defaultMeal() {
-            const h = new Date().getHours();
-            if (h < 10) return 'desayuno'; if (h < 12) return 'colacion1'; if (h < 15) return 'almuerzo';
-            if (h < 17) return 'colacion2'; if (h < 20) return 'once'; return 'cena';
-          }
+          function defaultMeal() { return slotForTime(nowMin() + 20); }
           const CX = 150, CY = 150, RIM = 142, IN = 120;
           const ZONES = {
             veg: { a0: 90, a1: 270, color: 'var(--veg)', label: 'VERDURAS', lx: 78, ly: 154, target: 2 },
@@ -852,6 +969,7 @@ jobs:
             $('#view').innerHTML = `
             <div class="meal-chips">${MEALS.map(m => { const k = mealTotals(dd.meals[m.id] || []).k; return `<button class="chip ${m.id === MEAL ? 'on' : ''}" data-act="meal" data-id="${m.id}">${m.e} ${m.n}${k ? `<span class="k">${fmt(k)}</span>` : ''}</button>`; }).join('')}</div>
 
+            ${planBanner()}
             <div class="table-stage" id="stage">
               <div class="plate-wrap"><div id="plateHost" style="width:74%;max-width:290px;display:flex;justify-content:center">${plateSVG(items, t)}</div><div class="sides" id="sidesHost">${sidesSVG(items)}</div></div>
               <div class="legend"><span><i style="background:var(--veg)"></i>½ verduras</span><span><i style="background:var(--prot)"></i>¼ proteína</span><span><i style="background:var(--carb)"></i>¼ carbohidrato</span></div>
@@ -871,6 +989,13 @@ jobs:
             <div class="card">${dayTable()}</div>
             `;
             $('#foodSearch').addEventListener('input', e => { QUERY = e.target.value.trim(); $('#foodGrid').innerHTML = foodGrid(); $$('.cat-tabs .chip').forEach(c => c.classList.toggle('on', !QUERY && c.dataset.id === CAT)); });
+          }
+          function planBanner() {
+            if (MEAL === 'extra') return `<div class="card tight plan-banner"><div class="small muted">Fuera de horario</div><div class="small">Aquí va lo que comas entre comidas. Si es ansiedad, primero un vaso de agua y espera 10 minutos.</div></div>`;
+            const p = planFor()[MEAL], has = (day().meals[MEAL] || []).length;
+            return `<div class="card tight plan-banner"><div class="row between"><div style="min-width:0"><div class="small muted">📋 Plan · ${S.routine[MEAL]} · ~${fmt(optKcal(p))} kcal</div>
+              <div class="pb-name">${esc(p.n)}</div><div class="small muted">${esc(planText(p))}</div></div></div>
+              <div class="row mt"><button class="btn sm primary" data-act="loadPlan">${has ? '+ Sumar el plan' : '⬇ Servir el plan'}</button><button class="btn sm" data-act="planSwap" data-slot="${MEAL}">🔄 Otra opción</button></div></div>`;
           }
           function foodGrid() {
             const q = QUERY.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -927,12 +1052,12 @@ jobs:
             }
             doAdd(id, btn);
           }
-          function doAdd(id, btn) {
+          function doAdd(id, btn, q = 1) {
             const f = food(id), dd = day();
             const items = dd.meals[MEAL] = dd.meals[MEAL] || [];
             const before = mealTotals(items).k, beforeDay = dayTotals().k;
             const ex = items.find(it => it.id === id);
-            if (ex) ex.q += 1; else items.push({ id, q: 1 });
+            if (ex) ex.q = r1(ex.q + q); else items.push({ id, q, t: nowHM() });
             LAST_ADDED = id;
             save();
             const z = catOf(f).z;
@@ -946,7 +1071,7 @@ jobs:
               const p = tokenPos(z, n + (z === 'mixed' ? 50 : 0));
               dest = svgPointToScreen(plate, p.x, p.y);
             }
-            const src = btn ? btn.getBoundingClientRect() : { left: innerWidth / 2, top: innerHeight, width: 0, height: 0 };
+            const src = btn ? btn.getBoundingClientRect() : { left: innerWidth / 2 - 20, top: innerHeight - 120, width: 40, height: 0 };
             const sx = src.left + src.width * 0.2, sy = src.top + src.height / 2;
             const fl = document.createElement('div'); fl.className = 'flyer'; fl.textContent = f.e;
             fl.style.left = '0px'; fl.style.top = '0px'; document.body.appendChild(fl);
@@ -984,6 +1109,63 @@ jobs:
             $('#tableCard').nextElementSibling.innerHTML = dayTable();
             LAST_ADDED = null;
           }
+
+          // ================= PLAN DEL DÍA =================
+          const GLASSES = WATER_GOAL / 250;
+          function waterTimes() {
+            const a0 = toMin(S.routine.wake) + 20, a1 = toMin(S.routine.sleep) - 60;
+            const end = a1 > a0 ? a1 : a1 + 1440, step = (end - a0) / (GLASSES - 1);
+            return Array.from({ length: GLASSES }, (_, i) => Math.round(a0 + i * step));
+          }
+          const fmtDur = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
+          function nextMeal() {
+            const dd = day(), n = nowMin();
+            return SLOTS.find(s => !(dd.meals[s.id] || []).length && toMin(S.routine[s.id]) >= n - 30) || null;
+          }
+          function itemsText(items) {
+            return items.map(it => { const f = food(it.id); return f ? `${f.e} ${f.n}${it.q !== 1 ? ` ×${it.q}` : ''}` : ''; }).join(' · ');
+          }
+          function renderPlan() {
+            const dd = day(), plan = planFor(), n = nowMin(), nm = nextMeal(), T = targets();
+            const planTot = SLOTS.reduce((s, m) => s + optKcal(plan[m.id]), 0);
+            const rows = [];
+            rows.push({ min: toMin(S.routine.wake), html: `<div class="tl-row"><div class="tl-time">${S.routine.wake}</div><div class="tl-dot"></div><div class="tl-body"><b>⏰ Levantarse</b><div class="small muted">Lo primero: un vaso de agua antes que cualquier cosa.</div></div></div>` });
+            for (const m of SLOTS) {
+              const t = toMin(S.routine[m.id]), items = dd.meals[m.id] || [], p = plan[m.id], mt = mealTotals(items);
+              const done = items.length > 0, late = !done && n > t + 60, isNext = nm && nm.id === m.id;
+              const st = done ? `<span class="pill ok">✓ ${fmt(mt.k)} kcal</span>` : late ? '<span class="pill bad">sin registrar</span>' : isNext ? `<span class="pill now">${t > n ? 'en ' + fmtDur(t - n) : 'AHORA'}</span>` : '';
+              rows.push({ min: t, html: `<div class="tl-row ${done ? 'done' : ''} ${isNext ? 'next' : ''}"><div class="tl-time">${S.routine[m.id]}</div><div class="tl-dot"></div><div class="tl-body">
+                <div class="row between"><b>${m.e} ${m.n}</b>${st}</div>
+                ${done ? `<div class="small">${esc(itemsText(items))}</div>` : `<div class="pb-name">${esc(p.n)} <span class="small muted">~${fmt(optKcal(p))} kcal</span></div><div class="small muted">${esc(planText(p))}</div>
+                <div class="row mt" style="flex-wrap:wrap"><button class="btn sm primary" data-act="eatPlan" data-slot="${m.id}">✓ Lo comí así</button><button class="btn sm" data-act="buildSlot" data-slot="${m.id}">🍽️ Armar</button><button class="btn sm" data-act="planSwap" data-slot="${m.id}">🔄 Otra</button></div>`}
+              </div></div>` });
+            }
+            for (const it of dd.meals.extra || []) {
+              const f = food(it.id); if (!f) continue;
+              rows.push({ min: toMin(it.t || '12:00'), html: `<div class="tl-row extra"><div class="tl-time">${it.t || ''}</div><div class="tl-dot"></div><div class="tl-body"><div class="row between"><span>${f.e} ${esc(f.n)}${it.q !== 1 ? ` ×${it.q}` : ''}</span><span class="pill">${fmt(f.k * it.q)} kcal</span></div><div class="small muted">Fuera de horario</div></div></div>` });
+            }
+            rows.push({ min: toMin(S.routine.sleep) + (toMin(S.routine.sleep) < toMin(S.routine.wake) ? 1440 : 0), html: `<div class="tl-row"><div class="tl-time">${S.routine.sleep}</div><div class="tl-dot"></div><div class="tl-body"><b>🌙 A dormir</b><div class="small muted">Dormir poco da más hambre al día siguiente.</div></div></div>` });
+            rows.sort((x, y) => x.min - y.min);
+            const wt = waterTimes(), every = Math.round((wt[1] - wt[0]));
+            const pendientes = SLOTS.filter(s => !(dd.meals[s.id] || []).length).length;
+            const sg = nm ? { face: '🪖', msg: `Próxima comida: ${nm.n.toLowerCase()} a las ${S.routine[nm.id]}. Si te da hambre antes, primero agua.` }
+              : pendientes ? { face: '🫡', msg: `Ya pasaron las comidas de hoy y ${pendientes} quedaron sin registrar. Anota lo que comiste aunque sea tarde. Mañana se sigue el plan.` }
+              : { face: '🎖️', msg: 'Comidas del día registradas. La cocina está cerrada, soldado.' };
+            $('#view').innerHTML = `
+            <div class="card sarge"><div class="face">${sg.face}</div><div><div class="label">INSTRUCTOR</div><div class="msg">${esc(sg.msg)}</div></div></div>
+            <div class="card">
+              <div class="row between"><h2>📋 Plan de hoy</h2><span class="pill">${fmt(planTot)} / ${fmt(T.kcal)} kcal</span></div>
+              <p class="small muted">💧 ${GLASSES} vasos: uno cada ${every} min entre ${fromMin(wt[0])} y ${fromMin(wt[wt.length - 1])}. Las notificaciones te avisan.</p>
+              <div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="snackOpen">🍫 Comí algo fuera de horario</button><button class="btn sm" data-act="routineOpen">⏰ Mi rutina</button></div>
+              <div class="timeline mt">${rows.map(r => r.html).join('')}</div>
+            </div>`;
+          }
+          function logItems(slot, list) {
+            const dd = day(), items = dd.meals[slot] = dd.meals[slot] || [], t = nowHM();
+            for (const [id, q] of list) { const ex = items.find(x => x.id === id); if (ex) ex.q = r1(ex.q + q); else items.push({ id, q, t }); }
+            save();
+          }
+          const SNACKS = ['manzana', 'pepino', 'zanahoria', 'yogurnat', 'huevo', 'frutillas', 'naranja', 'quesillo'];
 
           // ================= ENTRENO =================
           const EX = {
@@ -1138,8 +1320,9 @@ jobs:
             ${medCard(false)}
             <div class="card">
               <h3>⚙️ Ajustes</h3>
-              <div class="toggle"><div><div>Recordatorios</div><div class="small muted">Agua cada hora, circuitos y pesaje del lunes</div></div><button class="switch ${S.settings.reminders ? 'on' : ''}" data-act="reminders" aria-label="Recordatorios"></button></div>
-              <div class="actions"><button class="btn" data-act="profileOpen">Mis datos</button><button class="btn" data-act="backupOpen">Respaldo</button></div>
+              <div class="toggle"><div><div>Notificaciones</div><div class="small muted">Agua según tu rutina, cada comida con su plan, circuitos y pesaje</div></div><button class="switch ${S.settings.reminders ? 'on' : ''}" data-act="reminders" aria-label="Recordatorios"></button></div>
+              ${S.settings.reminders ? '<p class="small muted">Si los avisos llegan atrasados, activa los avisos a la hora exacta.</p><button class="btn sm" data-act="exactAlarm">⏱ Avisos a la hora exacta</button>' : ''}
+              <div class="actions"><button class="btn" data-act="routineOpen">Mi rutina</button><button class="btn" data-act="profileOpen">Mis datos</button><button class="btn" data-act="backupOpen">Respaldo</button></div>
             </div>`;
             loadPhotos();
             $('#photoInput').addEventListener('change', onPhoto);
@@ -1179,24 +1362,70 @@ jobs:
             if (!C || !C.isNativePlatform || !C.isNativePlatform()) return null;
             try { return (C.Plugins && C.Plugins.LocalNotifications) || C.registerPlugin('LocalNotifications'); } catch (e) { return null; }
           }
-          const WATER_LINES = ['💧 ¡Agua, soldado! Un vaso ahora.', '💧 ¿Cuánta agua llevas? Ve por un vaso. ¡YA!', '💧 La sed no se negocia. ¡Hidrátate!', '💧 Párate, camina 3 minutos y toma agua.'];
-          async function setReminders(on) {
-            const LN = notifPlugin();
-            if (!LN) { toast('Los recordatorios funcionan en la app instalada'); return on; }
+          const WATER_LINES = ['¡Agua, soldado! Un vaso ahora.', 'Ve por agua. ¡YA!', 'La sed no se negocia. ¡Hidrátate!', 'Párate, camina 3 minutos y toma agua.', 'Un vaso. Ahora. Sin discutir.'];
+          let schedT = null, listenersOn = false;
+          const scheduleSoon = () => { clearTimeout(schedT); schedT = setTimeout(() => scheduleAll(), 2500); };
+          function setupNotifListeners() {
+            const LN = notifPlugin(); if (!LN || listenersOn) return;
+            listenersOn = true;
+            try {
+              LN.registerActionTypes({ types: [{ id: 'WATER', actions: [{ id: 'drank', title: '✓ Me tomé un vaso' }] }, { id: 'MEAL', actions: [{ id: 'ate', title: '✓ Lo comí así' }] }] });
+              LN.addListener('localNotificationActionPerformed', ev => {
+                const n = ev.notification || {}, ex = n.extra || {};
+                if (ev.actionId === 'drank') { day().water += 250; save(); toast('+250 ml 💧 ¡Así se hace!'); }
+                else if (ev.actionId === 'ate' && ex.slot && ex.date === today() && !(day().meals[ex.slot] || []).length) { logItems(ex.slot, planFor()[ex.slot].it); toast('✓ Comida registrada'); }
+                else if (ex.tab) { if (ex.slot) MEAL = ex.slot; TAB = ex.tab; $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === TAB)); }
+                render(); scheduleSoon();
+              });
+            } catch (e) {}
+          }
+          // Programa los avisos de los próximos 3 días según tu rutina y tu plan.
+          // Se reprograma cada vez que sales de la app, así quedan al día con lo que ya registraste.
+          async function scheduleAll() {
+            const LN = notifPlugin(); if (!LN || !S.settings.reminders) return 0;
             try {
               const pend = await LN.getPending();
               if (pend.notifications && pend.notifications.length) await LN.cancel({ notifications: pend.notifications.map(n => ({ id: n.id })) });
-              if (!on) return false;
+              const list = [], now = Date.now(), R = S.routine;
+              for (let d = 0; d < 3; d++) {
+                const ds = addDays(today(), d), base = parseD(ds).getTime(), isToday = d === 0, dd = S.days[ds];
+                let seq = 0;
+                const add = (min, title, body, extra = {}, action) => {
+                  const at = base + min * 60000; if (at <= now + 30000) return;
+                  const n = { id: (d + 1) * 1000 + seq++, title, body, schedule: { at: new Date(at), allowWhileIdle: true }, extra };
+                  if (action) n.actionTypeId = action;
+                  list.push(n);
+                };
+                add(toMin(R.wake) + 5, 'CUARTEL · Diana', '⏰ Buenos días, soldado. Un vaso de agua ANTES del café.', { tab: 'cuartel' });
+                if (!(isToday && dd && dd.water >= WATER_GOAL)) {
+                  const already = isToday && dd ? Math.floor(dd.water / 250) : 0;
+                  waterTimes().forEach((m, i) => { if (i >= already) add(m, 'CUARTEL · Agua 💧', `Vaso ${i + 1} de ${GLASSES}. ${WATER_LINES[i % WATER_LINES.length]}`, { tab: 'cuartel' }, 'WATER'); });
+                }
+                const plan = planFor(ds);
+                for (const m of SLOTS) {
+                  if (isToday && dd && (dd.meals[m.id] || []).length) continue;
+                  const p = plan[m.id];
+                  add(toMin(R[m.id]), `CUARTEL · ${m.n} ${m.e}`, `${p.n}: ${planText(p)} (~${fmt(optKcal(p))} kcal)${m.id === 'cena' ? '. Nada de carbohidratos.' : ''}`, { tab: 'plan', slot: m.id, date: ds }, 'MEAL');
+                }
+                const circ = isToday && dd ? dd.circuits : 0;
+                if (circ < 1) add(toMin(R.desayuno) + 120, 'CUARTEL · Circuito 🏢', 'Primer circuito de oficina. 10 minutos. ¡Muévete!', { tab: 'entreno' });
+                if (circ < 2) add(toMin(R.colacion2) + 20, 'CUARTEL · Circuito 🏢', 'Segundo circuito del día. Sin excusas, recluta.', { tab: 'entreno' });
+                if (parseD(ds).getDay() === 1) add(toMin(R.wake) + 15, 'CUARTEL · Pesaje ⚖️', 'Lunes de pesaje: a la balanza en ayunas y mide la cintura.', { tab: 'progreso' });
+              }
+              if (list.length) await LN.schedule({ notifications: list });
+              return list.length;
+            } catch (e) { return 0; }
+          }
+          async function setReminders(on) {
+            const LN = notifPlugin();
+            if (!LN) { toast('Las notificaciones funcionan en la app instalada'); return false; }
+            try {
+              if (!on) { const pend = await LN.getPending(); if (pend.notifications && pend.notifications.length) await LN.cancel({ notifications: pend.notifications.map(n => ({ id: n.id })) }); toast('Notificaciones apagadas'); return false; }
               const perm = await LN.requestPermissions();
               if (perm.display !== 'granted') { toast('Debes permitir las notificaciones', true); return false; }
-              const list = [];
-              for (let h = 9; h <= 20; h++) list.push({ id: 100 + h, title: 'CUARTEL · Agua', body: WATER_LINES[h % WATER_LINES.length], schedule: { on: { hour: h, minute: 0 } } });
-              list.push({ id: 201, title: 'CUARTEL · Circuito', body: '🏢 Primer circuito de oficina. 10 minutos. ¡Muévete!', schedule: { on: { hour: 11, minute: 15 } } });
-              list.push({ id: 202, title: 'CUARTEL · Circuito', body: '🏢 Segundo circuito del día. Sin excusas, recluta.', schedule: { on: { hour: 16, minute: 30 } } });
-              list.push({ id: 203, title: 'CUARTEL · Pesaje', body: '⚖️ Lunes de pesaje. En ayunas a la balanza, y mide la cintura.', schedule: { on: { weekday: 2, hour: 8, minute: 0 } } });
-              list.push({ id: 204, title: 'CUARTEL · Cena', body: '🌙 Cena: proteína y verduras. Nada de carbohidratos.', schedule: { on: { hour: 19, minute: 45 } } });
-              await LN.schedule({ notifications: list });
-              toast('Recordatorios activados 🔔');
+              S.settings.reminders = true; setupNotifListeners();
+              const n = await scheduleAll();
+              toast(`🔔 Activadas: ${n} avisos programados`);
               return true;
             } catch (e) { toast('No se pudieron programar', true); return false; }
           }
@@ -1217,15 +1446,17 @@ jobs:
                 modal(`<div style="text-align:center"><div style="font-size:60px">🪖</div><h2>ALISTADO</h2>
                   <p>Tu ración diaria: <b>${fmt(targets().kcal)} kcal</b> y <b>${targets().prot} g de proteína</b>.</p>
                   <p class="muted small">Hoy es tu día 1 sin bebidas. Si caes, toca \"Me equivoqué\" y el contador vuelve a cero. Sin trampas.</p>
-                  <button class="btn primary block" data-act="closeModal">¡A LA ORDEN!</button></div>`);
+                  <button class="btn primary block" data-act="enableNotifs">🔔 ACTIVAR AVISOS DE AGUA Y COMIDA</button>
+                  <button class="btn block mt" data-act="closeModal">Después</button></div>`);
                 break;
               }
+              case 'enableNotifs': closeModal(); S.settings.reminders = await setReminders(true); save(); render(); break;
               case 'closeModal': closeModal(); break;
               case 'goto': go(el.dataset.tab); break;
               case 'water': {
                 const ml = +el.dataset.ml; dd.water = Math.max(0, dd.water + ml); save();
                 if (ml > 0 && dd.water >= WATER_GOAL && dd.water - ml < WATER_GOAL) toast('🎖️ ¡3 litros! Orden cumplida.'); else if (ml > 0) toast(`+${ml} ml 💧`);
-                renderCuartel(); break;
+                renderCuartel(); scheduleSoon(); break;
               }
               case 'relapseOpen':
                 modal(`<h2>Registrar recaída</h2><p class="muted small">Ser honesto es parte de la disciplina. ¿Cuánto tomaste?</p>
@@ -1267,6 +1498,59 @@ jobs:
                 const cat = $('#cCat').value, emo = { veg: '🥬', prot: '🍗', carb: '🍞', fruta: '🍎', lacteo: '🥛', grasa: '⭐', bebida: '🥤', plato: '🍲' }[cat];
                 S.customFoods.push({ id: 'c_' + Date.now(), custom: true, cat, n, e: emo, p: $('#cP').value.trim() || '1 porción', k, pr: +$('#cPr').value || 0, c: +$('#cC').value || 0, g: +$('#cG').value || 0 });
                 save(); closeModal(); CAT = 'mios'; renderPlato(); toast('Alimento guardado ⭐'); break;
+              }
+
+              case 'loadPlan': {
+                const p = planFor()[MEAL];
+                p.it.forEach(([id, q], i) => setTimeout(() => doAdd(id, null, q), i * 420));
+                break;
+              }
+              case 'planSwap': {
+                const s = el.dataset.slot, dd2 = day(); dd2.planOv = dd2.planOv || {};
+                dd2.planOv[s] = planFor()[s].idx + 1; save();
+                toast(`🔄 ${planFor()[s].n}`);
+                if (TAB === 'plato') renderPlato(); else render();
+                scheduleSoon();
+                break;
+              }
+              case 'eatPlan': {
+                const s = el.dataset.slot, p = planFor()[s];
+                logItems(s, p.it); toast(`✓ ${MEALS.find(m => m.id === s).n} registrado · ${fmt(optKcal(p))} kcal`); render(); scheduleSoon();
+                break;
+              }
+              case 'buildSlot': MEAL = el.dataset.slot; go('plato'); break;
+              case 'snackOpen': {
+                const slot = slotForTime(nowMin(), true);
+                const slotName = MEALS.find(m => m.id === slot).n;
+                modal(`<h2>🍫 Comí algo</h2>
+                  <div class="card sarge tight"><div class="face" style="font-size:28px">🪖</div><div class="msg small">¿Hambre o ansiedad? Si es ansiedad: un vaso de agua, diez respiraciones y espera 10 minutos. Si sigue, elige algo de aquí. Y si ya lo comiste, regístralo igual: la honestidad es parte de la misión.</div></div>
+                  <p class="small muted">Son las ${nowHM()}. Se registra en: <b>${slotName}</b>.</p>
+                  <div class="foods">${SNACKS.map(id => { const f = food(id); return `<button class="food" data-act="snack" data-id="${id}" data-slot="${slot}"><span class="em">${f.e}</span><span><div class="nm">${esc(f.n)}</div><div class="kc">${fmt(f.k)} kcal</div></span></button>`; }).join('')}</div>
+                  <div class="actions"><button class="btn" data-act="closeModal">Cancelar</button><button class="btn" data-act="snackOther" data-slot="${slot}">🔎 Otra cosa</button></div>`);
+                break;
+              }
+              case 'snack': {
+                const f = food(el.dataset.id); logItems(el.dataset.slot, [[f.id, 1]]); closeModal();
+                toast(`${f.e} ${f.n} registrado a las ${nowHM()}`); render(); break;
+              }
+              case 'snackOther': closeModal(); MEAL = el.dataset.slot; CAT = 'fruta'; go('plato'); break;
+              case 'routineOpen': {
+                const R = S.routine, fld = (k, l) => `<label class="f">${l}<input type="time" id="r_${k}" value="${R[k]}"></label>`;
+                modal(`<h2>⏰ Mi rutina</h2><p class="small muted">Con estos horarios armo tu plan y las notificaciones de agua y comida.</p>
+                  <div class="grid2">${fld('wake', '⏰ Me levanto')}${fld('desayuno', '🌅 Desayuno')}${fld('colacion1', '🍎 Colación AM')}${fld('almuerzo', '☀️ Almuerzo')}${fld('colacion2', '🥛 Colación PM')}${fld('once', '🫖 Once')}${fld('cena', '🌙 Cena')}${fld('sleep', '😴 Me acuesto')}</div>
+                  <div class="actions"><button class="btn" data-act="closeModal">Cancelar</button><button class="btn primary" data-act="routineSave">Guardar</button></div>`);
+                break;
+              }
+              case 'routineSave': {
+                for (const k of Object.keys(DEFAULT_ROUTINE)) { const v = $('#r_' + k).value; if (v) S.routine[k] = v; }
+                save(); closeModal(); render(); toast('Rutina guardada ⏰');
+                if (S.settings.reminders) scheduleAll(true);
+                break;
+              }
+              case 'exactAlarm': {
+                const LN = notifPlugin(); if (!LN) return toast('Solo en la app instalada');
+                try { await LN.changeExactNotificationSetting(); } catch (err) { toast('Tu Android no lo permite', true); }
+                break;
               }
 
               // entreno
@@ -1353,9 +1637,13 @@ jobs:
           });
 
           // refrescar al volver a la app (cambio de día, hora, etc.)
-          document.addEventListener('visibilitychange', () => { if (!document.hidden && !DRILL) render(); });
+          document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { if (S.profile) scheduleAll(); }
+            else if (!DRILL) render();
+          });
 
           render();
+          if (S.profile && S.settings.reminders) { setupNotifListeners(); scheduleAll(); }
           })();
           CUARTEL_EOF
           echo "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" | base64 -d > debug.keystore
